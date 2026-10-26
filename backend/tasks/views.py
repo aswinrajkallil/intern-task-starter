@@ -56,7 +56,6 @@ class TaskViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="stats")
     def stats(self, request):
-        today = timezone.localdate()
 
         counts = Task.objects.filter(
             assigned_to=request.user
@@ -69,7 +68,6 @@ class TaskViewSet(viewsets.ModelViewSet):
                 filter=(
                     Q(due_date__lt=timezone.now())
                     & ~Q(status="done")
-                    & Q(due_date__date__lt=today)
                 ),
             ),
         )
