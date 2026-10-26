@@ -1,5 +1,5 @@
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   fetchTasks,
   fetchTaskStats,
@@ -22,70 +22,62 @@ export default function App() {
   const [tasks, setTasks] = useState([]);
   const [total, setTotal] = useState(0);
   const [stats, setStats] = useState(EMPTY_STATS);
-  const [error, setError] = useState(null);
-
-  const loadStats = useCallback(async () => {
-    const data = await fetchTaskStats(user);
-    setStats(data);
-  }, [user]);
+  const [error, setError] = useState("");
+  const [updatingTaskId, setUpdatingTaskId] = useState(null);
 
   useEffect(() => {
     let active = true;
 
-    async function loadTasks() {
-      setError(null);
+    async function loadData() {
+      setError("");
 
       try {
-        const data = await fetchTasks(user, status);
-        if (active) {
-          setTasks(data.results);
-          setTotal(data.count);
-        }
+        const [taskData, statsData] = await Promise.all([
+          fetchTasks(user, status),
+          fetchTaskStats(user),
+        ]);
+
+        if (!active) return;
+
+        setTasks(taskData.results);
+        setTotal(taskData.count);
+        setStats(statsData);
       } catch (err) {
-        if (active) setError(err.message);
+        if (active) {
+          setError(err.message || "Failed to load tasks.");
+        }
       }
     }
 
-    loadTasks();
+    loadData();
 
     return () => {
       active = false;
     };
   }, [user, status]);
 
-  useEffect(() => {
-    let active = true;
+  async function handleMarkDone(task) {
+    setUpdatingTaskId(task.id);
+    setError("");
 
-    fetchTaskStats(user)
-      .then((data) => {
-        if (active) setStats(data);
-      })
-      .catch((err) => {
-        if (active) setError(err.message);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [user]);
-
-  const handleMarkDone = async (task) => {
     try {
       await updateTask(user, task.id, { status: "done" });
 
-      setTasks((current) =>
-        current.map((item) =>
-          item.id === task.id
-            ? { ...item, status: "done", is_overdue: false }
-            : item
-        )
-      );
+      // Reload the filtered list and stats from the backend.
+      const [taskData, statsData] = await Promise.all([
+        fetchTasks(user, status),
+        fetchTaskStats(user),
+      ]);
 
-      await loadStats();
+      setTasks(taskData.results);
+      setTotal(taskData.count);
+      setStats(statsData);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Failed to update task.");
+    } finally {
+      setUpdatingTaskId(null);
     }
-  };
+  }
 
   return (
     <div className="container">
@@ -98,8 +90,10 @@ export default function App() {
             value={user}
             onChange={(e) => setUser(e.target.value)}
           >
-            {USERS.map((u) => (
-              <option key={u} value={u}>{u}</option>
+            {USERS.map((username) => (
+              <option key={username} value={username}>
+                {username}
+              </option>
             ))}
           </select>
         </label>
@@ -119,13 +113,21 @@ export default function App() {
       </div>
 
       <section className="stats" aria-label="Task statistics">
-        <div>To do: <strong>{stats.todo}</strong></div>
-        <div>In progress: <strong>{stats.in_progress}</strong></div>
-        <div>Done: <strong>{stats.done}</strong></div>
-        <div>Overdue: <strong>{stats.overdue}</strong></div>
+        <div>
+          To do: <strong>{stats.todo}</strong>
+        </div>
+        <div>
+          In progress: <strong>{stats.in_progress}</strong>
+        </div>
+        <div>
+          Done: <strong>{stats.done}</strong>
+        </div>
+        <div>
+          Overdue: <strong>{stats.overdue}</strong>
+        </div>
       </section>
 
-      {error && <p className="error">{error}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
 
       <p className="meta">{total} tasks</p>
 
@@ -135,6 +137,7 @@ export default function App() {
             key={task.id}
             task={task}
             onMarkDone={handleMarkDone}
+            isUpdating={updatingTaskId === task.id}
           />
         ))}
       </ul>

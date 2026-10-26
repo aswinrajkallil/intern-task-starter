@@ -8,11 +8,11 @@ from .models import Task
 class TaskSerializer(serializers.ModelSerializer):
     assigned_to_name = serializers.CharField(
         source="assigned_to.username",
-        read_only=True
+        read_only=True,
     )
     created_by_name = serializers.CharField(
         source="created_by.username",
-        read_only=True
+        read_only=True,
     )
     is_overdue = serializers.SerializerMethodField()
 
@@ -43,4 +43,4 @@ class TaskSerializer(serializers.ModelSerializer):
         if not obj.due_date or obj.status == "done":
             return False
 
-        return obj.due_date.date() < timezone.localdate()
+        return obj.due_date < timezone.now()
